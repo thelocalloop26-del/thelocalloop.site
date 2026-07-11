@@ -639,7 +639,7 @@
         <div class="field" data-field="phone">
           <label>Phone <span class="req">*</span></label>
           <input type="tel" name="phone" placeholder="+91 ooooo ooooo">
-          <span class="err">Please enter a valid phone number.</span>
+          <span class="err">Enter a valid 10-digit Indian mobile number.</span>
         </div>
         <div class="field" data-field="instagram">
           <label>Instagram ID</label>
@@ -753,7 +753,7 @@
         <div class="field" data-field="phone">
           <label>Phone <span class="req">*</span></label>
           <input type="tel" name="phone" placeholder="+91 ooooo ooooo">
-          <span class="err">Enter a valid phone.</span>
+          <span class="err">Enter a valid 10-digit Indian mobile number.</span>
         </div>
         <div class="field" data-field="people">
           <label>People</label>
@@ -987,6 +987,26 @@ const GEMS_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQwu
    treating the booking as confirmed. Free workshops (no price set) skip
    payment entirely and submit straight away.
 
+   FRAUD CHECKS (server-side, can't be skipped by editing the page):
+   The website already blocks obviously bad phone numbers, emails, and
+   malformed UTRs before they're even sent — but someone could bypass the
+   browser entirely and post straight to this script's URL, so the same
+   checks run again here, plus two things only the server can do:
+     • Duplicate UTR — the same 12-digit reference number used across two
+       different bookings is the single strongest sign of someone reusing
+       an old screenshot or a friend's payment. Every new submission is
+       checked against every UTR already in the sheet.
+     • Suspicious UTR pattern — a real UTR from a bank is effectively
+       random. "000000000000" or "123456789012" typed in to get past the
+       required field is flagged immediately.
+   None of this is appended silently — every issue found is written into
+   a "Flags" column right next to the row, so it's visible the moment you
+   open the sheet. Nothing is ever rejected outright (the form has no way
+   to know if the script rejected it, since it submits in the background),
+   so a flagged row still needs you to glance at it before treating the
+   booking as real — this narrows down which few rows out of fifteen or
+   twenty actually need a second look, rather than replacing your judgment.
+
    SETUP (one time):
    1. Create/open the Google Sheet you want bookings saved to.
    2. Extensions → Apps Script. Delete any starter code and paste in:
@@ -996,12 +1016,55 @@ const GEMS_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQwu
           || SpreadsheetApp.getActiveSpreadsheet().insertSheet("Bookings");
         if (sheet.getLastRow() === 0) {
           sheet.appendRow(["Timestamp","Workshop","Date","Time","Price","Name","Phone","Email",
-            "People","Notes","UPI Reference","Payment Status"]);
+            "People","Notes","UPI Reference","Payment Status","Flags"]);
         }
         var p = e.parameter;
-        var status = p.upiRef ? "Awaiting Verification" : "Not Required (Free)";
+        var flags = [];
+
+        // Phone: must reduce to a 10-digit number starting 6-9, with or
+        // without a +91/91/0 prefix — same rule the website itself uses.
+        var phoneDigits = (p.phone || "").replace(/\D/g, "");
+        var phoneCore = phoneDigits.length === 10 ? phoneDigits
+          : (phoneDigits.length === 12 && phoneDigits.indexOf("91") === 0) ? phoneDigits.slice(2)
+          : (phoneDigits.length === 11 && phoneDigits.indexOf("0") === 0) ? phoneDigits.slice(1)
+          : null;
+        if (!phoneCore || !/^[6-9]\d{9}$/.test(phoneCore)) {
+          flags.push("Invalid phone");
+        }
+        // Email is optional on this form, so only flag it if one was given
+        // and it doesn't look real.
+        if (p.email && !/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(p.email)) {
+          flags.push("Invalid email");
+        }
+
+        var upiRef = (p.upiRef || "").trim();
+        var status = "Not Required (Free)";
+        if (upiRef) {
+          status = "Awaiting Verification";
+          if (!/^\d{12}$/.test(upiRef)) {
+            flags.push("UTR not 12 digits");
+          } else {
+            var allSameDigit = /^(\d)\1{11}$/.test(upiRef);
+            var ascending = true, descending = true;
+            for (var i = 1; i < upiRef.length; i++) {
+              if (+upiRef[i] !== (+upiRef[i-1] + 1) % 10) ascending = false;
+              if (+upiRef[i] !== (+upiRef[i-1] + 9) % 10) descending = false;
+            }
+            if (allSameDigit || ascending || descending) {
+              flags.push("Suspicious UTR pattern");
+            }
+            var data = sheet.getDataRange().getValues();
+            for (var r = 1; r < data.length; r++) {
+              if (String(data[r][10]).trim() === upiRef) {
+                flags.push("Duplicate UTR (same as row " + (r + 1) + ")");
+                break;
+              }
+            }
+          }
+        }
+
         sheet.appendRow([new Date(), p.workshop, p.date, p.time, p.price, p.name, p.phone,
-          p.email, p.people, p.notes, p.upiRef || "", status]);
+          p.email, p.people, p.notes, upiRef, status, flags.join(" | ")]);
         return ContentService.createTextOutput(JSON.stringify({result:"success"}))
           .setMimeType(ContentService.MimeType.JSON);
       }
@@ -1011,6 +1074,16 @@ const GEMS_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQwu
    4. Copy the Web App URL (ends in /exec) and paste it below.
    5. Save this file and re-upload it once. Setup is then done for good —
       every booking submitted on the site becomes a new row in "Bookings".
+
+   ALREADY LIVE ON THIS SITE? If you set up the booking sheet before this
+   update, your Apps Script only has the old code, and your sheet is
+   missing the "Flags" column. Open the Apps Script project (same one,
+   Extensions → Apps Script from your Bookings sheet), replace all the
+   code with the version above, then Deploy → Manage deployments → the
+   pencil/edit icon → New version → Deploy. The Web App URL stays exactly
+   the same, so nothing on the site needs to change. The "Flags" column
+   will start appearing from the next new booking onward — add the header
+   manually to the existing sheet if you want it to line up with old rows.
 
    You'll also need your UPI ID (the "VPA" you'd normally share to get paid —
    looks like yourname@okhdfcbank, yourname@ybl, etc.) and the name UPI
@@ -1029,6 +1102,13 @@ const UPI_PAYEE_NAME = "thelocalloop";
    This one also saves the uploaded poster image to a Google Drive folder and
    drops a link to it in the sheet.
 
+   Phone and email are checked again here on the server, same rule as the
+   website itself uses, as a second line of defense in case someone bypasses
+   the browser and posts straight to this script's URL. Anything that looks
+   fake is written into a "Flags" column next to the row rather than being
+   silently accepted — nothing is ever rejected outright, since the form has
+   no way to know if the script rejected it.
+
    SETUP (one time):
    1. Create/open the Google Sheet you want collaboration requests saved to.
    2. Extensions → Apps Script. Delete any starter code and paste in:
@@ -1038,9 +1118,23 @@ const UPI_PAYEE_NAME = "thelocalloop";
           || SpreadsheetApp.getActiveSpreadsheet().insertSheet("Collaborations");
         if (sheet.getLastRow() === 0) {
           sheet.appendRow(["Timestamp","Brand Name","Contact Person","Email","Phone","Instagram ID",
-            "Business Type","Location","Event Date","Description","Website","Poster Link"]);
+            "Business Type","Location","Event Date","Description","Website","Poster Link","Flags"]);
         }
         var p = e.parameter;
+        var flags = [];
+
+        var phoneDigits = (p.phone || "").replace(/\D/g, "");
+        var phoneCore = phoneDigits.length === 10 ? phoneDigits
+          : (phoneDigits.length === 12 && phoneDigits.indexOf("91") === 0) ? phoneDigits.slice(2)
+          : (phoneDigits.length === 11 && phoneDigits.indexOf("0") === 0) ? phoneDigits.slice(1)
+          : null;
+        if (!phoneCore || !/^[6-9]\d{9}$/.test(phoneCore)) {
+          flags.push("Invalid phone");
+        }
+        if (!p.email || !/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(p.email)) {
+          flags.push("Invalid email");
+        }
+
         var posterLink = "";
         if (p.posterData && p.posterName) {
           try {
@@ -1054,7 +1148,7 @@ const UPI_PAYEE_NAME = "thelocalloop";
           }
         }
         sheet.appendRow([new Date(), p.brand, p.contact, p.email, p.phone, p.instagram,
-          p.businessType, p.location, p.eventDate, p.description, p.website, posterLink]);
+          p.businessType, p.location, p.eventDate, p.description, p.website, posterLink, flags.join(" | ")]);
         return ContentService.createTextOutput(JSON.stringify({result:"success"}))
           .setMimeType(ContentService.MimeType.JSON);
       }
@@ -1064,6 +1158,11 @@ const UPI_PAYEE_NAME = "thelocalloop";
    4. Copy the Web App URL (ends in /exec) and paste it below.
    5. Save this file and re-upload it once. Every submitted proposal — with
       poster, if one was attached — becomes a new row in "Collaborations".
+
+   ALREADY LIVE ON THIS SITE? Open the same Apps Script project from your
+   Collaborations sheet (Extensions → Apps Script), replace all the code
+   with the version above, then Deploy → Manage deployments → the
+   pencil/edit icon → New version → Deploy. The Web App URL doesn't change.
 
    Note: uploaded posters are capped at ~5MB in this setup (Apps Script's
    practical limit for this kind of request). Larger files will fail the
@@ -1190,6 +1289,24 @@ async function loadGemsFromSheet(){
    ============================================================================ */
 
 function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild; }
+
+/* ---------- Shared contact validators (used by both Booking and Collaborate forms) ----------
+   Phone: accepts a plain 10-digit Indian mobile, or the same with a "+91"/"91"/"0" prefix —
+   whatever the person typed, spacing/dashes included — but the underlying 10 digits must
+   start with 6-9, which is true of every real Indian mobile number. This catches placeholder
+   junk like "1234567890" or "0000000000" that the old loose regex let through.
+   Email: requires a real-looking domain with a letters-only TLD of 2+ characters. */
+function isValidIndianPhone(v){
+  const digits = (v || '').replace(/\D/g, '');
+  let core = null;
+  if(digits.length === 10) core = digits;
+  else if(digits.length === 12 && digits.startsWith('91')) core = digits.slice(2);
+  else if(digits.length === 11 && digits.startsWith('0')) core = digits.slice(1);
+  return !!core && /^[6-9]\d{9}$/.test(core);
+}
+function isValidEmail(v){
+  return /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test((v || '').trim());
+}
 
 /* ---------- Workshops ---------- */
 function showLoading(containerId, label){
@@ -1380,8 +1497,8 @@ function validateForm(){
     const fieldWrap = form.querySelector(`[data-field="${name}"]`);
     const input = form.querySelector(`[name="${name}"]`);
     let ok = input.value.trim() !== '';
-    if(name==='email' && ok) ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.value.trim());
-    if(name==='phone' && ok) ok = /^[+]?[\d\s-]{7,15}$/.test(input.value.trim());
+    if(name==='email' && ok) ok = isValidEmail(input.value);
+    if(name==='phone' && ok) ok = isValidIndianPhone(input.value);
     fieldWrap.classList.toggle('invalid', !ok);
     if(!ok) valid = false;
   });
@@ -1577,8 +1694,8 @@ function validateBookingForm(){
   let valid = true;
   const checks = {
     name: v => v.trim() !== '',
-    phone: v => /^[+]?[\d\s-]{7,15}$/.test(v.trim()),
-    email: v => v.trim()==='' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
+    phone: v => isValidIndianPhone(v),
+    email: v => v.trim()==='' || isValidEmail(v)
   };
   Object.keys(checks).forEach(name=>{
     const fieldWrap = bookingForm.querySelector(`[data-field="${name}"]`);
