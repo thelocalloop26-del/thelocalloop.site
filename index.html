@@ -412,6 +412,47 @@
   .modal-status.ok{ color:var(--gold-light); }
   .modal-status.warn{ color:#e08a6f; }
 
+  /* ---------------- Gallery modal ---------------- */
+  .gallery-box{
+    background:var(--navy-card); border:1px solid var(--line); border-radius:var(--radius-lg);
+    max-width:640px; width:100%; padding:20px; max-height:88vh;
+    transform:translateY(18px) scale(.98); transition:transform .35s var(--ease);
+  }
+  .modal-overlay.open .gallery-box{ transform:translateY(0) scale(1); }
+  .gallery-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:14px; }
+  .gallery-head h3{ font-size:19px; }
+  .gallery-head .sub{ font-size:12.5px; color:var(--slate); margin-top:2px; }
+  .gallery-stage{
+    position:relative; border-radius:var(--radius-md); overflow:hidden;
+    aspect-ratio:4/3; background:var(--navy);
+  }
+  .gallery-stage img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .gallery-nav{
+    position:absolute; top:50%; transform:translateY(-50%); width:38px; height:38px;
+    border-radius:50%; background:rgba(11,21,38,.65); backdrop-filter:blur(6px);
+    border:1px solid var(--line); color:var(--cream); display:flex; align-items:center; justify-content:center;
+    transition:.25s;
+  }
+  .gallery-nav:hover{ border-color:var(--gold); color:var(--gold-light); background:rgba(11,21,38,.85); }
+  .gallery-nav.prev{ left:12px; }
+  .gallery-nav.next{ right:12px; }
+  .gallery-count{
+    position:absolute; bottom:12px; right:12px; background:rgba(11,21,38,.7); backdrop-filter:blur(6px);
+    color:var(--cream-dim); font-size:11.5px; padding:5px 11px; border-radius:999px; border:1px solid var(--line);
+  }
+  .gallery-thumbs{ display:flex; gap:8px; margin-top:14px; overflow-x:auto; padding-bottom:2px; }
+  .gallery-thumbs img{
+    width:64px; height:52px; object-fit:cover; border-radius:9px; flex-shrink:0; cursor:pointer;
+    opacity:.5; border:1.5px solid transparent; transition:.25s;
+  }
+  .gallery-thumbs img:hover{ opacity:.8; }
+  .gallery-thumbs img.active{ opacity:1; border-color:var(--gold); }
+  .c-card .actions a.photos, .c-card .actions button.photos{
+    flex:1; text-align:center; padding:10px; border-radius:12px; font-size:12px; font-weight:600;
+    border:1px solid var(--line); color:var(--cream); background:none; transition:.25s;
+  }
+  .c-card .actions button.photos:hover{ border-color:var(--gold); color:var(--gold-light); }
+
   .upi-box{
     display:none; flex-direction:column; align-items:center; text-align:center;
     background:var(--navy-raised); border:1px solid var(--line); border-radius:14px;
@@ -542,7 +583,20 @@
         <p>Hand-picked, updated every week straight from our planning sheet.</p>
       </div>
     </div>
+
+    <div class="filter-bar">
+      <div class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5"/></svg>
+        <input type="text" id="workshopSearch" placeholder="Search workshops or venues...">
+      </div>
+    </div>
+    <div class="filter-bar" id="workshopChips"></div>
+
     <div class="workshop-grid" id="workshopGrid"></div>
+    <div class="empty-state" id="workshopEmpty" style="display:none;">
+      <div class="icon">🎨</div>
+      <p>No workshops match those filters yet. Try clearing one.</p>
+    </div>
   </div>
 </section>
 
@@ -799,6 +853,32 @@
   </div>
 </div>
 
+<!-- ============================================================
+     CAFE PHOTO GALLERY MODAL — opened from a café card's "Photos" button
+     ============================================================ -->
+<div class="modal-overlay" id="galleryOverlay" role="dialog" aria-modal="true" aria-labelledby="galleryTitle">
+  <div class="gallery-box">
+    <div class="gallery-head">
+      <div>
+        <h3 id="galleryTitle"></h3>
+        <div class="sub" id="gallerySub"></div>
+      </div>
+      <button type="button" class="modal-close" onclick="closeGalleryModal()" aria-label="Close">✕</button>
+    </div>
+    <div class="gallery-stage">
+      <img id="galleryImage" src="" alt="">
+      <button type="button" class="gallery-nav prev" onclick="stepGallery(-1)" aria-label="Previous photo">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+      <button type="button" class="gallery-nav next" onclick="stepGallery(1)" aria-label="Next photo">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <div class="gallery-count" id="galleryCount"></div>
+    </div>
+    <div class="gallery-thumbs" id="galleryThumbs"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -849,6 +929,12 @@ const workshopsFallbackData = [
 const cafesFallbackData = [
   {
     image: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?q=80&w=800&auto=format&fit=crop",
+    gallery: [
+      "https://images.unsplash.com/photo-1554118811-1e0d58224f24?q=80&w=1200&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=1200&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1517705008128-361805f42e86?q=80&w=1200&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=1200&auto=format&fit=crop"
+    ],
     name: "The Bakers Table",
     rating: 4.6,
     avgCost: "₹700 for two",
@@ -865,6 +951,11 @@ const cafesFallbackData = [
   },
   {
     image: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=800&auto=format&fit=crop",
+    gallery: [
+      "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=1200&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1554118811-1e0d58224f24?q=80&w=1200&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1521017432531-fbd92d768814?q=80&w=1200&auto=format&fit=crop"
+    ],
     name: "Rooftop Brew Co.",
     rating: 4.4,
     avgCost: "₹900 for two",
@@ -881,6 +972,11 @@ const cafesFallbackData = [
   },
   {
     image: "https://images.unsplash.com/photo-1445116572660-236099ec97a0?q=80&w=800&auto=format&fit=crop",
+    gallery: [
+      "https://images.unsplash.com/photo-1445116572660-236099ec97a0?q=80&w=1200&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=1200&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1442512595331-e89e73853f31?q=80&w=1200&auto=format&fit=crop"
+    ],
     name: "Third Space Coffee",
     rating: 4.7,
     avgCost: "₹500 for two",
@@ -897,6 +993,11 @@ const cafesFallbackData = [
   },
   {
     image: "https://images.unsplash.com/photo-1466978913421-dad2ebd01d17?q=80&w=800&auto=format&fit=crop",
+    gallery: [
+      "https://images.unsplash.com/photo-1466978913421-dad2ebd01d17?q=80&w=1200&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?q=80&w=1200&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1544148103-0773bf10d330?q=80&w=1200&auto=format&fit=crop"
+    ],
     name: "Midnight Diner",
     rating: 4.2,
     avgCost: "₹650 for two",
@@ -1247,6 +1348,9 @@ async function loadCafesFromSheet(){
     const rows = await fetchSheet(CAFES_SHEET_CSV_URL);
     const mapped = rows.filter(r=>r.name).map(r=>({
       image: r.image || '',
+      gallery: (r.gallery || '').split(/[|,]/).map(s=>s.trim()).filter(Boolean).length
+        ? (r.gallery || '').split(/[|,]/).map(s=>s.trim()).filter(Boolean)
+        : (r.image ? [r.image] : []),
       name: r.name || '',
       rating: parseFloat(r.rating) || 0,
       avgCost: r.avgCost || '',
@@ -1314,14 +1418,43 @@ function showLoading(containerId, label){
     `<div class="empty-state"><div class="icon">⏳</div><p>${label}</p></div>`;
 }
 
+let activeWorkshopFilter = 'All';
+let workshopSearchTerm = '';
+
+function renderWorkshopChips(){
+  const cats = ['All', ...new Set(workshopsData.map(w=>w.category).filter(Boolean))];
+  if(!cats.includes(activeWorkshopFilter)) activeWorkshopFilter = 'All';
+  const wrap = document.getElementById('workshopChips');
+  wrap.innerHTML = '';
+  cats.forEach(c=>{
+    const chip = el(`<button class="chip ${c===activeWorkshopFilter?'active':''}">${c}</button>`);
+    chip.addEventListener('click', ()=>{ activeWorkshopFilter=c; renderWorkshopChips(); renderWorkshops(); });
+    wrap.appendChild(chip);
+  });
+}
+
+function workshopMatchesFilter(w, f){
+  return f === 'All' || w.category === f;
+}
+
 function renderWorkshops(){
   const grid = document.getElementById('workshopGrid');
+  const emptyState = document.getElementById('workshopEmpty');
   grid.innerHTML = '';
   if(!workshopsData.length){
+    emptyState.style.display = 'none';
     grid.parentElement.appendChild(el(`<div class="empty-state"><div class="icon">🎨</div><p>No workshops scheduled this weekend — check back soon.</p></div>`));
     return;
   }
+  const term = workshopSearchTerm.trim().toLowerCase();
+  const matches = (w)=> workshopMatchesFilter(w, activeWorkshopFilter) &&
+    (term==='' || w.name.toLowerCase().includes(term) || w.venue.toLowerCase().includes(term) || (w.description||'').toLowerCase().includes(term));
+
+  const anyMatch = workshopsData.some(matches);
+  emptyState.style.display = anyMatch ? 'none' : 'block';
+
   workshopsData.forEach((w, idx)=>{
+    if(!matches(w)) return;
     const card = el(`
       <div class="w-card">
         <div class="poster" style="background-image:url('${w.image}')"><span class="cat">${w.category}</span></div>
@@ -1400,6 +1533,7 @@ function renderCafes(){
           <div class="tag-row">${tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>
         </div>
         <div class="actions">
+          <button type="button" class="photos" data-cafe-index="${cafesData.indexOf(c)}">📷 Photos</button>
           <a class="map" href="${c.mapsLink}" target="_blank" rel="noopener">Google Maps</a>
           ${c.offerLink ? `<a class="offer" href="${c.offerLink}" target="_blank" rel="noopener">Offer</a>` : ''}
         </div>
@@ -1479,6 +1613,12 @@ menuToggle.addEventListener('click', ()=>{
 navLinks.querySelectorAll('a').forEach(a=> a.addEventListener('click', ()=>{
   menuToggle.classList.remove('open'); navLinks.classList.remove('open');
 }));
+
+/* ---------- Workshop search input ---------- */
+document.getElementById('workshopSearch').addEventListener('input', (e)=>{
+  workshopSearchTerm = e.target.value;
+  renderWorkshops();
+});
 
 /* ---------- Cafe search input ---------- */
 document.getElementById('cafeSearch').addEventListener('input', (e)=>{
@@ -1690,6 +1830,65 @@ function closeBookingModal(){
 bookingOverlay.addEventListener('click', (e)=>{ if(e.target === bookingOverlay) closeBookingModal(); });
 document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && bookingOverlay.classList.contains('open')) closeBookingModal(); });
 
+/* ---------- Cafe photo gallery modal ---------- */
+const galleryOverlay = document.getElementById('galleryOverlay');
+const galleryImage = document.getElementById('galleryImage');
+const galleryCount = document.getElementById('galleryCount');
+const galleryThumbs = document.getElementById('galleryThumbs');
+let galleryPhotos = [];
+let galleryIndex = 0;
+
+function renderGalleryImage(){
+  if(!galleryPhotos.length) return;
+  galleryImage.src = galleryPhotos[galleryIndex];
+  galleryCount.textContent = `${galleryIndex + 1} / ${galleryPhotos.length}`;
+  galleryThumbs.querySelectorAll('img').forEach((t,i)=> t.classList.toggle('active', i===galleryIndex));
+}
+
+function stepGallery(delta){
+  if(!galleryPhotos.length) return;
+  galleryIndex = (galleryIndex + delta + galleryPhotos.length) % galleryPhotos.length;
+  renderGalleryImage();
+}
+
+function openGalleryModal(cafeIndex){
+  const c = cafesData[cafeIndex];
+  if(!c) return;
+  galleryPhotos = (c.gallery && c.gallery.length) ? c.gallery : (c.image ? [c.image] : []);
+  if(!galleryPhotos.length) return;
+  galleryIndex = 0;
+  document.getElementById('galleryTitle').textContent = c.name;
+  document.getElementById('gallerySub').textContent = `${c.area || ''}${c.cuisine ? ' · ' + c.cuisine : ''}`;
+  galleryThumbs.innerHTML = '';
+  galleryPhotos.forEach((src, i)=>{
+    const thumb = el(`<img src="${src}" alt="${c.name} photo ${i+1}">`);
+    thumb.addEventListener('click', ()=>{ galleryIndex=i; renderGalleryImage(); });
+    galleryThumbs.appendChild(thumb);
+  });
+  renderGalleryImage();
+  galleryOverlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeGalleryModal(){
+  galleryOverlay.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+document.getElementById('cafeGrid').addEventListener('click', (e)=>{
+  const btn = e.target.closest('.photos[data-cafe-index]');
+  if(!btn) return;
+  openGalleryModal(Number(btn.dataset.cafeIndex));
+});
+
+galleryOverlay.addEventListener('click', (e)=>{ if(e.target === galleryOverlay) closeGalleryModal(); });
+document.addEventListener('keydown', (e)=>{
+  if(!galleryOverlay.classList.contains('open')) return;
+  if(e.key === 'Escape') closeGalleryModal();
+  else if(e.key === 'ArrowLeft') stepGallery(-1);
+  else if(e.key === 'ArrowRight') stepGallery(1);
+});
+
 function validateBookingForm(){
   let valid = true;
   const checks = {
@@ -1771,6 +1970,7 @@ async function init(){
 
   await Promise.all([ loadWorkshopsFromSheet(), loadCafesFromSheet(), loadGemsFromSheet() ]);
 
+  renderWorkshopChips();
   renderWorkshops();
   renderCafeChips();
   renderCafes();
