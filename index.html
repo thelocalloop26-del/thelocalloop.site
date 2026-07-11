@@ -257,7 +257,12 @@
   .empty-state .icon{ font-size:34px; margin-bottom:14px; }
 
   /* ---------------- Filters ---------------- */
-  .filter-bar{ display:flex; flex-wrap:wrap; gap:10px; margin-bottom:36px; }
+  .filter-label{
+    font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--slate); margin:0 0 8px 2px;
+  }
+  .filter-bar{ display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px; }
+  .filter-bar.filter-bar-end{ margin-bottom:36px; }
   .filter-bar .search{
     flex:1 1 220px; display:flex; align-items:center; gap:8px;
     background:var(--navy-card); border:1px solid var(--line); border-radius:999px; padding:11px 18px;
@@ -590,7 +595,12 @@
         <input type="text" id="workshopSearch" placeholder="Search workshops or venues...">
       </div>
     </div>
+    <div class="filter-label">Category</div>
     <div class="filter-bar" id="workshopChips"></div>
+    <div class="filter-label">Date</div>
+    <div class="filter-bar" id="workshopDateChips"></div>
+    <div class="filter-label">Time of Day</div>
+    <div class="filter-bar filter-bar-end" id="workshopTimeChips"></div>
 
     <div class="workshop-grid" id="workshopGrid"></div>
     <div class="empty-state" id="workshopEmpty" style="display:none;">
@@ -621,7 +631,7 @@
         <input type="text" id="cafeSearch" placeholder="Search cafés or dishes...">
       </div>
     </div>
-    <div class="filter-bar" id="cafeChips"></div>
+    <div class="filter-bar filter-bar-end" id="cafeChips"></div>
 
     <div class="cafe-grid" id="cafeGrid"></div>
     <div class="empty-state" id="cafeEmpty" style="display:none;">
@@ -646,7 +656,7 @@
       </div>
     </div>
 
-    <div class="filter-bar" id="gemChips"></div>
+    <div class="filter-bar filter-bar-end" id="gemChips"></div>
     <div class="gem-grid" id="gemGrid"></div>
     <div class="empty-state" id="gemEmpty" style="display:none;">
       <div class="icon">💎</div>
@@ -1054,9 +1064,23 @@ const hiddenGemsFallbackData = [
       Workshops columns (first row, exact spelling):
       image | name | date | time | venue | description | category | price | bookingLink | mapsLink
 
+      → The "Category" and "Date" filter chips on the site are generated
+        automatically from whatever values appear in the category/date
+        columns — no extra setup needed, just keep spelling consistent
+        (e.g. always "Art & Craft", not sometimes "Art and Craft").
+      → The "Time of Day" filter reads the START time out of the time
+        column, so keep it in "H:MM AM/PM" format at the start of the
+        cell (e.g. "5:00 PM – 7:30 PM"). It buckets into Morning
+        (before 12 PM), Afternoon (12–5 PM), Evening (5–9 PM), Night
+        (9 PM onward). A row that doesn't match that pattern still shows
+        up under every Time of Day filter (it just can't be bucketed).
+
       Cafes columns (first row, exact spelling):
-      image | name | rating | avgCost | bestDish | cuisine | area | petFriendly | workFriendly | rooftop | lateNight | budget | mapsLink | offerLink
+      image | gallery | name | rating | avgCost | bestDish | cuisine | area | petFriendly | workFriendly | rooftop | lateNight | budget | mapsLink | offerLink
       (for petFriendly / workFriendly / rooftop / lateNight, type TRUE or FALSE in each cell)
+      (gallery is OPTIONAL — put 2 or more photo URLs in that one cell,
+       separated by a "|" or "," e.g. "url1 | url2 | url3". If you leave
+       it blank, the photo gallery just falls back to the single "image".)
 
    2. In Google Sheets: File → Share → Publish to web → choose the specific
       sheet/tab → choose "Comma-separated values (.csv)" → Publish.
@@ -1419,7 +1443,31 @@ function showLoading(containerId, label){
 }
 
 let activeWorkshopFilter = 'All';
+let activeWorkshopDateFilter = 'All';
+let activeWorkshopTimeFilter = 'All';
 let workshopSearchTerm = '';
+
+const workshopTimeBuckets = ['All','Morning','Afternoon','Evening','Night'];
+
+/* Pulls the first "H:MM AM/PM" style token out of a time string like
+   "5:00 PM – 7:30 PM" and returns its 24-hour hour, or null if the
+   time field doesn't follow that pattern (sheet data can be messy). */
+function parseStartHour(timeStr){
+  const m = (timeStr || '').match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if(!m) return null;
+  let hour = parseInt(m[1], 10) % 12;
+  if(m[3].toUpperCase() === 'PM') hour += 12;
+  return hour;
+}
+
+function workshopTimeBucket(w){
+  const hour = parseStartHour(w.time);
+  if(hour === null) return null;
+  if(hour < 12) return 'Morning';
+  if(hour < 17) return 'Afternoon';
+  if(hour < 21) return 'Evening';
+  return 'Night';
+}
 
 function renderWorkshopChips(){
   const cats = ['All', ...new Set(workshopsData.map(w=>w.category).filter(Boolean))];
@@ -1431,10 +1479,35 @@ function renderWorkshopChips(){
     chip.addEventListener('click', ()=>{ activeWorkshopFilter=c; renderWorkshopChips(); renderWorkshops(); });
     wrap.appendChild(chip);
   });
+
+  // Dates are shown in the order they first appear in the sheet/fallback data.
+  const dates = ['All', ...new Set(workshopsData.map(w=>w.date).filter(Boolean))];
+  if(!dates.includes(activeWorkshopDateFilter)) activeWorkshopDateFilter = 'All';
+  const dateWrap = document.getElementById('workshopDateChips');
+  dateWrap.innerHTML = '';
+  dates.forEach(d=>{
+    const chip = el(`<button class="chip ${d===activeWorkshopDateFilter?'active':''}">${d}</button>`);
+    chip.addEventListener('click', ()=>{ activeWorkshopDateFilter=d; renderWorkshopChips(); renderWorkshops(); });
+    dateWrap.appendChild(chip);
+  });
+
+  const timeWrap = document.getElementById('workshopTimeChips');
+  timeWrap.innerHTML = '';
+  workshopTimeBuckets.forEach(t=>{
+    const chip = el(`<button class="chip ${t===activeWorkshopTimeFilter?'active':''}">${t}</button>`);
+    chip.addEventListener('click', ()=>{ activeWorkshopTimeFilter=t; renderWorkshopChips(); renderWorkshops(); });
+    timeWrap.appendChild(chip);
+  });
 }
 
 function workshopMatchesFilter(w, f){
   return f === 'All' || w.category === f;
+}
+function workshopMatchesDate(w, f){
+  return f === 'All' || w.date === f;
+}
+function workshopMatchesTime(w, f){
+  return f === 'All' || workshopTimeBucket(w) === f;
 }
 
 function renderWorkshops(){
@@ -1448,6 +1521,8 @@ function renderWorkshops(){
   }
   const term = workshopSearchTerm.trim().toLowerCase();
   const matches = (w)=> workshopMatchesFilter(w, activeWorkshopFilter) &&
+    workshopMatchesDate(w, activeWorkshopDateFilter) &&
+    workshopMatchesTime(w, activeWorkshopTimeFilter) &&
     (term==='' || w.name.toLowerCase().includes(term) || w.venue.toLowerCase().includes(term) || (w.description||'').toLowerCase().includes(term));
 
   const anyMatch = workshopsData.some(matches);
