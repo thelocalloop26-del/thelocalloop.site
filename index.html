@@ -231,7 +231,7 @@
   }
   .w-card.in-view{ opacity:1; transform:translateY(0); }
   .w-card:hover{ border-color:var(--gold); }
-  .w-card .poster{ height:190px; background-size:cover; background-position:center; background-color:var(--navy-raised); position:relative; }
+  .w-card .poster{ height:190px; background-size:cover; background-position:center; position:relative; }
   .w-card .poster .cat{
     position:absolute; top:12px; left:12px; background:rgba(11,21,38,.75);
     backdrop-filter:blur(6px); color:var(--gold-light); font-size:11px; font-weight:600;
@@ -271,40 +271,6 @@
   }
   .chip:hover{ border-color:var(--gold); color:var(--gold-light); }
   .chip.active{ background:var(--gold); color:var(--navy-deep); border-color:var(--gold); font-weight:600; }
-
-  /* Dropdown filters (Date / Time) — styled to match .chip / .search */
-  .filter-bar select{
-    padding:9px 14px; border-radius:999px; border:1px solid var(--line); font-size:12.5px;
-    font-weight:500; color:var(--cream-dim); background:var(--navy-card); transition:.25s;
-  }
-  .filter-bar select:hover, .filter-bar select:focus{ border-color:var(--gold); color:var(--gold-light); }
-  .filter-bar select option{ background:var(--navy-card); color:var(--cream); }
-
-  /* ---------------- Cafe photo gallery / carousel ---------------- */
-  .c-card .photo{ position:relative; overflow:hidden; }
-  .c-card .photo-track{
-    display:flex; height:100%; transition:transform .4s var(--ease);
-  }
-  .c-card .photo-slide{
-    flex:0 0 100%; height:100%; background-size:cover; background-position:center;
-    background-color:var(--navy-raised);
-  }
-  .c-card .photo-nav{
-    position:absolute; top:50%; transform:translateY(-50%); width:28px; height:28px;
-    border-radius:50%; background:rgba(11,21,38,.6); backdrop-filter:blur(4px);
-    color:var(--cream); display:flex; align-items:center; justify-content:center;
-    font-size:14px; opacity:0; transition:opacity .25s;
-  }
-  .c-card .photo:hover .photo-nav{ opacity:1; }
-  .c-card .photo-nav.prev{ left:8px; }
-  .c-card .photo-nav.next{ right:8px; }
-  .c-card .photo-dots{
-    position:absolute; bottom:8px; left:0; right:0; display:flex; justify-content:center; gap:5px;
-  }
-  .c-card .photo-dots span{
-    width:5px; height:5px; border-radius:50%; background:rgba(244,236,221,.4); transition:.25s;
-  }
-  .c-card .photo-dots span.active{ background:var(--gold-light); width:14px; border-radius:3px; }
 
   /* ---------------- Cafe cards ---------------- */
   .cafe-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:24px; }
@@ -458,6 +424,15 @@
   .upi-id-row{ display:flex; align-items:center; gap:10px; margin-top:12px; font-size:12.5px; color:var(--slate); }
   .upi-copy{ padding:6px 12px; border-radius:999px; border:1px solid var(--line); font-size:11.5px; font-weight:600; color:var(--gold-light); transition:.25s; }
   .upi-copy:hover{ border-color:var(--gold); }
+
+  .upi-pay-btn{
+    display:flex; align-items:center; justify-content:center; gap:8px; width:100%;
+    padding:13px 20px; border-radius:12px; background:var(--gold); color:var(--navy-deep);
+    font-size:13.5px; font-weight:600; transition:.3s var(--ease);
+  }
+  .upi-pay-btn:hover{ background:var(--gold-light); transform:translateY(-1px); }
+  .upi-or{ font-size:11.5px; color:var(--slate); margin:12px 0; text-transform:uppercase; letter-spacing:.05em; }
+  .upi-fallback-note{ font-size:11.5px; color:var(--slate); margin-top:12px; line-height:1.5; text-align:left; }
 </style>
 </head>
 <body>
@@ -567,22 +542,7 @@
         <p>Hand-picked, updated every week straight from our planning sheet.</p>
       </div>
     </div>
-
-    <div class="filter-bar">
-      <div class="search">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5"/></svg>
-        <input type="text" id="workshopSearch" placeholder="Search workshops, venues...">
-      </div>
-      <select id="workshopDateFilter" aria-label="Filter by date"><option value="All">All Dates</option></select>
-      <select id="workshopTimeFilter" aria-label="Filter by time"><option value="All">All Times</option></select>
-    </div>
-    <div class="filter-bar" id="workshopCategoryChips"></div>
-
     <div class="workshop-grid" id="workshopGrid"></div>
-    <div class="empty-state" id="workshopFilterEmpty" style="display:none;">
-      <div class="icon">🎨</div>
-      <p>No workshops match those filters yet. Try clearing one.</p>
-    </div>
   </div>
 </section>
 
@@ -812,15 +772,23 @@
 
       <div class="upi-box" id="upiBox">
         <div class="upi-amount">Pay <strong id="upiAmountLabel">₹0</strong> via any UPI app</div>
+
+        <a href="#" id="upiPayBtn" class="upi-pay-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          Pay via UPI App
+        </a>
+        <div class="upi-or" id="upiOrDivider">or scan the QR code below</div>
+
         <img id="upiQrImg" class="upi-qr" alt="UPI payment QR code" width="180" height="180">
         <div class="upi-id-row">
           <span id="upiIdText"></span>
           <button type="button" class="upi-copy" id="upiCopyBtn">Copy UPI ID</button>
         </div>
+        <div class="upi-fallback-note" id="upiFallbackNote">If tapping "Pay via UPI App" didn't open anything, you may be inside Instagram's or WhatsApp's built-in browser — tap the ⋯ menu and choose "Open in Browser," or just scan the QR code above.</div>
         <div class="field" data-field="upiRef" style="margin-top:14px; width:100%;">
           <label>UPI Transaction / Reference No. <span class="req">*</span></label>
-          <input type="text" name="upiRef" id="upiRefField" placeholder="12-digit UTR from your UPI app">
-          <span class="err">Enter the reference number shown after paying.</span>
+          <input type="text" name="upiRef" id="upiRefField" placeholder="12-digit UTR from your UPI app" inputmode="numeric" maxlength="12">
+          <span class="err">Enter the 12-digit UTR shown in your UPI app after paying (numbers only).</span>
         </div>
       </div>
 
@@ -1050,7 +1018,7 @@ const GEMS_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQwu
    ============================================================================ */
 
 const BOOKING_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwvRcQ74Nly5CYALp9MyWMjRv_jjCc_NXNu89GmNzQpPgvUrweFKd1_H9ltWIfdyfBPTw/exec";
-const UPI_ID = "9638083043@superyes";
+const UPI_ID = "PASTE_YOUR_UPI_ID_HERE";
 const UPI_PAYEE_NAME = "thelocalloop";
 
 /* ============================================================================
@@ -1145,42 +1113,6 @@ function toBool(val){
   return /^(true|yes|y|1)$/i.test((val||'').trim());
 }
 
-/* ------------------------------------------------------------------------
-   IMAGE URL FIX — Google Drive "share" links (drive.google.com/file/d/...
-   or drive.google.com/open?id=...) do NOT work as direct <img>/background
-   image sources once the site is hosted online: they serve an HTML viewer
-   page, not the raw image, and often get blocked by Drive's virus-scan
-   interstitial or missing CORS headers. This converts those links into
-   Google's direct-content CDN format, which loads reliably as an image.
-   Any normal image URL (Unsplash, Imgur, your own host, etc.) passes
-   through unchanged.
-   ------------------------------------------------------------------------ */
-function normalizeImageUrl(url){
-  const u = (url || '').trim();
-  if(!u) return '';
-
-  // drive.google.com/file/d/FILE_ID/view?... 
-  let m = u.match(/drive\.google\.com\/file\/d\/([^/]+)/);
-  if(m) return `https://lh3.googleusercontent.com/d/${m[1]}=w1000`;
-
-  // drive.google.com/open?id=FILE_ID  or  ...uc?id=FILE_ID
-  m = u.match(/[?&]id=([^&]+)/);
-  if(m && u.includes('drive.google.com')) return `https://lh3.googleusercontent.com/d/${m[1]}=w1000`;
-
-  return u;
-}
-
-/* Splits a cafe's "image" column into multiple photos. Supports either
-   comma-separated URLs in one cell, or a pipe ( | ) as the separator if a
-   URL itself happens to contain a comma. Each URL is also Drive-normalized. */
-function splitImages(raw){
-  const sep = (raw || '').includes('|') ? '|' : ',';
-  return (raw || '')
-    .split(sep)
-    .map(s=>normalizeImageUrl(s))
-    .filter(Boolean);
-}
-
 async function fetchSheet(url){
   const res = await fetch(url, { cache:'no-store' });
   if(!res.ok) throw new Error('Sheet fetch failed: '+res.status);
@@ -1193,7 +1125,7 @@ async function loadWorkshopsFromSheet(){
   try{
     const rows = await fetchSheet(WORKSHOPS_SHEET_CSV_URL);
     const mapped = rows.filter(r=>r.name).map(r=>({
-      image: normalizeImageUrl(r.image),
+      image: r.image || '',
       name: r.name || '',
       date: r.date || '',
       time: r.time || '',
@@ -1215,8 +1147,7 @@ async function loadCafesFromSheet(){
   try{
     const rows = await fetchSheet(CAFES_SHEET_CSV_URL);
     const mapped = rows.filter(r=>r.name).map(r=>({
-      images: splitImages(r.image),
-      image: normalizeImageUrl((r.image || '').split(/[,|]/)[0]), // first photo, kept for backward compatibility
+      image: r.image || '',
       name: r.name || '',
       rating: parseFloat(r.rating) || 0,
       avgCost: r.avgCost || '',
@@ -1266,60 +1197,14 @@ function showLoading(containerId, label){
     `<div class="empty-state"><div class="icon">⏳</div><p>${label}</p></div>`;
 }
 
-/* ---------- Workshop search & filters ---------- */
-let workshopSearchTerm = '';
-let activeWorkshopCategory = 'All';
-let activeWorkshopDate = 'All';
-let activeWorkshopTime = 'All';
-
-function populateWorkshopFilterControls(){
-  // Category chips (dynamic, built from whatever categories exist in the data)
-  const cats = ['All', ...new Set(workshopsData.map(w=>w.category).filter(Boolean))];
-  const chipWrap = document.getElementById('workshopCategoryChips');
-  chipWrap.innerHTML = '';
-  cats.forEach(c=>{
-    const chip = el(`<button class="chip ${c===activeWorkshopCategory?'active':''}">${c}</button>`);
-    chip.addEventListener('click', ()=>{ activeWorkshopCategory=c; populateWorkshopFilterControls(); renderWorkshops(); });
-    chipWrap.appendChild(chip);
-  });
-
-  // Date / Time dropdowns (dynamic, built from whatever values exist in the data)
-  const dateSelect = document.getElementById('workshopDateFilter');
-  const dates = ['All', ...new Set(workshopsData.map(w=>w.date).filter(Boolean))];
-  dateSelect.innerHTML = dates.map(d=>`<option value="${d}" ${d===activeWorkshopDate?'selected':''}>${d==='All'?'All Dates':d}</option>`).join('');
-
-  const timeSelect = document.getElementById('workshopTimeFilter');
-  const times = ['All', ...new Set(workshopsData.map(w=>w.time).filter(Boolean))];
-  timeSelect.innerHTML = times.map(t=>`<option value="${t}" ${t===activeWorkshopTime?'selected':''}>${t==='All'?'All Times':t}</option>`).join('');
-}
-
 function renderWorkshops(){
   const grid = document.getElementById('workshopGrid');
-  const filterEmpty = document.getElementById('workshopFilterEmpty');
   grid.innerHTML = '';
-
   if(!workshopsData.length){
-    filterEmpty.style.display = 'none';
     grid.parentElement.appendChild(el(`<div class="empty-state"><div class="icon">🎨</div><p>No workshops scheduled this weekend — check back soon.</p></div>`));
     return;
   }
-
-  const term = workshopSearchTerm.trim().toLowerCase();
-  const filtered = workshopsData
-    .map((w, idx)=>({ ...w, _idx: idx })) // keep the original index for the Book Now button
-    .filter(w=>
-      (activeWorkshopCategory==='All' || w.category===activeWorkshopCategory) &&
-      (activeWorkshopDate==='All' || w.date===activeWorkshopDate) &&
-      (activeWorkshopTime==='All' || w.time===activeWorkshopTime) &&
-      (term==='' ||
-        w.name.toLowerCase().includes(term) ||
-        w.description.toLowerCase().includes(term) ||
-        w.venue.toLowerCase().includes(term))
-    );
-
-  filterEmpty.style.display = filtered.length ? 'none' : 'block';
-
-  filtered.forEach(w=>{
+  workshopsData.forEach((w, idx)=>{
     const card = el(`
       <div class="w-card">
         <div class="poster" style="background-image:url('${w.image}')"><span class="cat">${w.category}</span></div>
@@ -1334,7 +1219,7 @@ function renderWorkshops(){
           ${w.price ? `<div class="price">${w.price}</div>` : ''}
         </div>
         <div class="actions">
-          <button type="button" class="book" data-workshop-index="${w._idx}">Book Now</button>
+          <button type="button" class="book" data-workshop-index="${idx}">Book Now</button>
           <a class="map" href="${w.mapsLink}" target="_blank" rel="noopener">Google Maps</a>
         </div>
       </div>
@@ -1388,24 +1273,9 @@ function renderCafes(){
     if(c.workFriendly) tags.push('Work Friendly');
     if(c.rooftop) tags.push('Rooftop');
     if(c.lateNight) tags.push('Late Night');
-
-    // A cafe may have one photo or several — build a small gallery either way.
-    const photos = (c.images && c.images.length) ? c.images : [c.image];
-    const slides = photos.map(src=>`<div class="photo-slide" style="background-image:url('${src}')"></div>`).join('');
-    const dots = photos.length > 1
-      ? `<div class="photo-dots">${photos.map((_,i)=>`<span class="${i===0?'active':''}"></span>`).join('')}</div>`
-      : '';
-    const navArrows = photos.length > 1
-      ? `<button type="button" class="photo-nav prev" aria-label="Previous photo">‹</button><button type="button" class="photo-nav next" aria-label="Next photo">›</button>`
-      : '';
-
     const card = el(`
       <div class="c-card">
-        <div class="photo" data-photo-count="${photos.length}">
-          <div class="photo-track">${slides}</div>
-          ${navArrows}
-          ${dots}
-        </div>
+        <div class="photo" style="background-image:url('${c.image}')"></div>
         <div class="body">
           <div class="row1"><h3>${c.name}</h3><span class="rating">★ ${c.rating}</span></div>
           <div class="sub">${c.cuisine} · ${c.area} · ${c.avgCost}</div>
@@ -1419,29 +1289,8 @@ function renderCafes(){
       </div>
     `);
     grid.appendChild(card);
-    if(photos.length > 1) setupPhotoCarousel(card.querySelector('.photo'));
   });
   observeReveal('.c-card');
-}
-
-/* Wires up prev/next buttons and dot indicators for a cafe's photo gallery. */
-function setupPhotoCarousel(photoEl){
-  const track = photoEl.querySelector('.photo-track');
-  const dots = [...photoEl.querySelectorAll('.photo-dots span')];
-  const total = photoEl.querySelectorAll('.photo-slide').length;
-  let current = 0;
-
-  function goTo(i){
-    current = (i + total) % total;
-    track.style.transform = `translateX(-${current * 100}%)`;
-    dots.forEach((d, idx)=> d.classList.toggle('active', idx===current));
-  }
-
-  const prevBtn = photoEl.querySelector('.photo-nav.prev');
-  const nextBtn = photoEl.querySelector('.photo-nav.next');
-  if(prevBtn) prevBtn.addEventListener('click', (e)=>{ e.stopPropagation(); goTo(current - 1); });
-  if(nextBtn) nextBtn.addEventListener('click', (e)=>{ e.stopPropagation(); goTo(current + 1); });
-  dots.forEach((d, idx)=> d.addEventListener('click', (e)=>{ e.stopPropagation(); goTo(idx); }));
 }
 
 /* ---------- Hidden Gems ---------- */
@@ -1518,20 +1367,6 @@ navLinks.querySelectorAll('a').forEach(a=> a.addEventListener('click', ()=>{
 document.getElementById('cafeSearch').addEventListener('input', (e)=>{
   cafeSearchTerm = e.target.value;
   renderCafes();
-});
-
-/* ---------- Workshop search & filter inputs ---------- */
-document.getElementById('workshopSearch').addEventListener('input', (e)=>{
-  workshopSearchTerm = e.target.value;
-  renderWorkshops();
-});
-document.getElementById('workshopDateFilter').addEventListener('change', (e)=>{
-  activeWorkshopDate = e.target.value;
-  renderWorkshops();
-});
-document.getElementById('workshopTimeFilter').addEventListener('change', (e)=>{
-  activeWorkshopTime = e.target.value;
-  renderWorkshops();
 });
 
 /* ---------- Collaborate form ---------- */
@@ -1641,6 +1476,13 @@ function parseRupees(priceStr){
   return isNaN(value) ? 0 : value;
 }
 
+/* A phone/tablet is the only context where an installed UPI app can
+   actually be launched — desktop browsers have nothing to hand off to,
+   so there the QR code is the only usable option. */
+function isMobileDevice(){
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 function buildUpiLink(amountRupees, note){
   const params = new URLSearchParams({
     pa: UPI_ID,
@@ -1658,6 +1500,9 @@ function updateUpiBox(){
   const rupees = parseRupees(priceStr) * people;
   const upiBox = document.getElementById('upiBox');
   const upiRefField = document.getElementById('upiRefField');
+  const payBtn = document.getElementById('upiPayBtn');
+  const orDivider = document.getElementById('upiOrDivider');
+  const fallbackNote = document.getElementById('upiFallbackNote');
 
   if(rupees <= 0 || UPI_ID.startsWith('PASTE_YOUR')){
     upiBox.classList.remove('show');
@@ -1669,16 +1514,32 @@ function updateUpiBox(){
   document.getElementById('upiAmountLabel').textContent = `₹${rupees}`;
   const workshopName = document.getElementById('bookingWorkshopLabel').textContent;
   const link = buildUpiLink(rupees, workshopName);
+
   document.getElementById('upiQrImg').src =
     `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(link)}`;
   document.getElementById('upiIdText').textContent = UPI_ID;
+
+  const onMobile = isMobileDevice();
+  payBtn.href = link;
+  payBtn.style.display = onMobile ? 'flex' : 'none';
+  orDivider.style.display = onMobile ? 'block' : 'none';
+  fallbackNote.style.display = onMobile ? 'block' : 'none';
 }
 
 bookingForm.querySelector('[name="people"]').addEventListener('input', updateUpiBox);
 
+document.getElementById('upiPayBtn').addEventListener('click', ()=>{
+  // Give the OS a moment to hand off before anything else on the page reacts.
+  showToast('Opening your UPI app…');
+});
+
 document.getElementById('upiCopyBtn').addEventListener('click', ()=>{
   navigator.clipboard.writeText(UPI_ID);
   showToast('UPI ID copied');
+});
+
+document.getElementById('upiRefField').addEventListener('input', (e)=>{
+  e.target.value = e.target.value.replace(/\D/g, '').slice(0, 12);
 });
 
 function openBookingModal(name, date, time, price){
@@ -1728,11 +1589,14 @@ function validateBookingForm(){
   });
 
   // UPI reference is only required when the UPI box is actually showing
-  // (i.e. this workshop has a price and UPI_ID is configured).
+  // (i.e. this workshop has a price and UPI_ID is configured). Enforced as
+  // exactly 12 digits, since that's the fixed format of a real UPI UTR —
+  // this filters out obviously fake/malformed entries before they're even
+  // submitted (doesn't prove payment happened, but blocks the laziest fakes).
   const upiRefField = document.getElementById('upiRefField');
   if(upiRefField.hasAttribute('data-required')){
     const refWrap = bookingForm.querySelector('[data-field="upiRef"]');
-    const ok = upiRefField.value.trim() !== '';
+    const ok = /^\d{12}$/.test(upiRefField.value.trim());
     refWrap.classList.toggle('invalid', !ok);
     if(!ok) valid = false;
   }
@@ -1790,7 +1654,6 @@ async function init(){
 
   await Promise.all([ loadWorkshopsFromSheet(), loadCafesFromSheet(), loadGemsFromSheet() ]);
 
-  populateWorkshopFilterControls();
   renderWorkshops();
   renderCafeChips();
   renderCafes();
