@@ -851,11 +851,10 @@
           <span class="err">Enter the 12-digit UTR shown in your UPI app after paying (numbers only).</span>
         </div>
         <div class="field" data-field="terms" style="margin-top:14px; width:100%;">
-          <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;">
+          <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
             <input type="checkbox" name="terms" id="termsCheckbox">
-            <span style="font-size:12px; line-height:1.6; color:var(--slate);">
-              I have read and agree to the <strong style="color:var(--gold-light);">Terms &amp; Conditions</strong>:
-              if the paid amount is less than the required amount, the booking will not be confirmed; if paid in excess, the extra amount will not be refunded — please pay the exact amount shown above or on the QR code; no refund is given if the user cancels the booking; if we cancel the booking due to full registration capacity, the full amount is refunded within 2 business days.
+            <span style="font-size:12.5px; color:var(--slate);">
+              I accept the <button type="button" id="termsLinkBtn" style="text-decoration:underline; color:var(--gold-light); font-weight:600;">Terms &amp; Conditions</button>
             </span>
           </label>
           <span class="err">You must accept the Terms &amp; Conditions before confirming your booking.</span>
@@ -880,6 +879,25 @@
     </div>
     <div class="modal-sub" id="bookingSuccessMsg" style="margin-bottom:0;">We have received your booking request. We will verify your payment status and send your booking confirmation to your registered email address shortly.</div>
     <button type="button" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:20px;" onclick="closeBookingSuccessModal()">Okay</button>
+  </div>
+</div>
+
+<!-- ============================================================
+     TERMS & CONDITIONS MODAL — opened from the booking form's terms link
+     ============================================================ -->
+<div class="modal-overlay" id="termsOverlay" role="dialog" aria-modal="true" aria-labelledby="termsTitle">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="termsTitle">Terms &amp; Conditions</h3>
+      <button type="button" class="modal-close" onclick="closeTermsModal()" aria-label="Close">✕</button>
+    </div>
+    <ol style="margin:0; padding-left:20px; display:flex; flex-direction:column; gap:12px; font-size:13px; color:var(--cream-dim); line-height:1.6;">
+      <li>If the amount paid is less than the required amount, the booking will not be confirmed.</li>
+      <li>If the amount paid is more than the required amount, no excess amount will be refunded. Pay only the exact amount shown on the website or via the QR code.</li>
+      <li>No refund will be provided if the user cancels the booking.</li>
+      <li>If the booking is canceled by us due to full registration capacity, the full amount will be refunded within 2 business days.</li>
+    </ol>
+    <button type="button" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:20px;" onclick="closeTermsModal()">Close</button>
   </div>
 </div>
 
@@ -1974,6 +1992,7 @@ function updateUpiBox(){
     upiBox.classList.remove('show');
     upiRefField.removeAttribute('data-required');
     termsField.removeAttribute('data-required');
+    updateBookingSubmitState();
     return;
   }
   upiBox.classList.add('show');
@@ -1989,9 +2008,30 @@ function updateUpiBox(){
   document.getElementById('upiQrImg').src =
     `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(link)}`;
   document.getElementById('upiIdText').textContent = UPI_ID;
+
+  updateBookingSubmitState();
+}
+
+/* Keeps "Confirm Booking" disabled until the terms checkbox is accepted,
+   whenever accepting terms is actually required (i.e. this is a paid
+   booking). Free bookings have nothing to agree to, so the button stays
+   enabled for them. Called whenever the terms checkbox changes or the
+   payment box is recalculated. */
+function updateBookingSubmitState(){
+  const termsField = bookingForm.querySelector('[data-field="terms"]');
+  const termsCheckbox = document.getElementById('termsCheckbox');
+  const requiresTerms = termsField.hasAttribute('data-required');
+  bookingSubmitBtn.disabled = requiresTerms && !termsCheckbox.checked;
 }
 
 bookingForm.querySelector('[name="people"]').addEventListener('input', updateUpiBox);
+
+document.getElementById('termsCheckbox').addEventListener('change', ()=>{
+  bookingForm.querySelector('[data-field="terms"]').classList.remove('invalid');
+  updateBookingSubmitState();
+});
+
+document.getElementById('termsLinkBtn').addEventListener('click', openTermsModal);
 
 document.getElementById('upiCopyBtn').addEventListener('click', ()=>{
   navigator.clipboard.writeText(UPI_ID);
@@ -2032,6 +2072,20 @@ function closeBookingModal(){
 
 bookingOverlay.addEventListener('click', (e)=>{ if(e.target === bookingOverlay) closeBookingModal(); });
 document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && bookingOverlay.classList.contains('open')) closeBookingModal(); });
+
+/* ---------- Terms & Conditions modal ---------- */
+const termsOverlay = document.getElementById('termsOverlay');
+
+function openTermsModal(){
+  termsOverlay.classList.add('open');
+}
+
+function closeTermsModal(){
+  termsOverlay.classList.remove('open');
+}
+
+termsOverlay.addEventListener('click', (e)=>{ if(e.target === termsOverlay) closeTermsModal(); });
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && termsOverlay.classList.contains('open')) closeTermsModal(); });
 
 /* ---------- Booking success popup ---------- */
 const bookingSuccessOverlay = document.getElementById('bookingSuccessOverlay');
