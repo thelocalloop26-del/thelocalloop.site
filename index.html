@@ -264,6 +264,9 @@
   }
   .filter-bar .search input{ background:none; border:none; color:var(--cream); font-size:13.5px; width:100%; }
   .filter-bar .search input::placeholder{ color:var(--slate); }
+  .filter-bar .search select{ background:none; border:none; color:var(--cream); font-size:13.5px; width:100%; cursor:pointer; }
+  .filter-bar .search select option{ background:var(--navy-card); color:var(--cream); }
+  .filter-bar .search input[type="date"]{ color-scheme:dark; cursor:pointer; }
   .chip{
     padding:9px 16px; border-radius:999px; border:1px solid var(--line); font-size:12.5px;
     font-weight:500; color:var(--cream-dim); transition:.25s; background:var(--navy-card);
@@ -589,6 +592,20 @@
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5"/></svg>
         <input type="text" id="workshopSearch" placeholder="Search workshops or venues...">
       </div>
+      <div class="search" id="workshopDateFilterWrap">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        <input type="date" id="workshopDateFilter" aria-label="Filter workshops by date">
+      </div>
+      <div class="search" id="workshopTimeFilterWrap">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        <select id="workshopTimeFilter" aria-label="Filter workshops by time of day">
+          <option value="">Any time</option>
+          <option value="morning">Morning</option>
+          <option value="afternoon">Afternoon</option>
+          <option value="evening">Evening</option>
+          <option value="night">Night</option>
+        </select>
+      </div>
     </div>
     <div class="filter-bar" id="workshopChips"></div>
 
@@ -761,11 +778,10 @@
     <p class="lead">We help Ahmedabad discover the city's best cafés, workshops, hidden gems and unique experiences — every weekend, curated by people who actually go.</p>
     <div class="follow-row">
       <a href="https://instagram.com/thelocallooop" target="_blank" rel="noopener" class="follow-chip">📸 Instagram</a>
-      <a href="https://wa.me/910000000000" target="_blank" rel="noopener" class="follow-chip">💬 WhatsApp</a>
-      <a href="mailto:hello@thelocallooop.com" class="follow-chip">✉️ Email</a>
+      <a href="mailto:thelocalloop26@gmail.com" class="follow-chip">✉️ Email</a>
     </div>
     <div class="contact-info">
-      <span>hello@thelocallooop.com</span>
+      <span>thelocalloop26@gmail.com</span>
       <span>Ahmedabad, Gujarat</span>
     </div>
   </div>
@@ -850,6 +866,20 @@
 
       <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:8px;" id="bookingSubmitBtn">Confirm Booking</button>
     </form>
+  </div>
+</div>
+
+<!-- ============================================================
+     BOOKING SUCCESS POPUP — shown after a booking request is submitted
+     ============================================================ -->
+<div class="modal-overlay" id="bookingSuccessOverlay" role="dialog" aria-modal="true" aria-labelledby="bookingSuccessTitle">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="bookingSuccessTitle">Booking Request Received</h3>
+      <button type="button" class="modal-close" onclick="closeBookingSuccessModal()" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-sub" id="bookingSuccessMsg" style="margin-bottom:0;">We have received your booking request. We will verify your payment status and send your booking confirmation to your registered email address shortly.</div>
+    <button type="button" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:20px;" onclick="closeBookingSuccessModal()">Okay</button>
   </div>
 </div>
 
@@ -1117,7 +1147,7 @@ const GEMS_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQwu
           || SpreadsheetApp.getActiveSpreadsheet().insertSheet("Bookings");
         if (sheet.getLastRow() === 0) {
           sheet.appendRow(["Timestamp","Workshop","Date","Time","Price","Name","Phone","Email",
-            "People","Notes","UPI Reference","Payment Status","Flags"]);
+            "People","Notes","UPI Reference","Payment Status","Booking Status","Confirmation Sent","Flags"]);
         }
         var p = e.parameter;
         var flags = [];
@@ -1139,9 +1169,14 @@ const GEMS_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQwu
         }
 
         var upiRef = (p.upiRef || "").trim();
+        // Payment Status always starts at "Pending" for a paid booking — you
+        // manually flip it to "Confirmed" once you've checked the UTR against
+        // your bank/UPI app, and that edit is what fires the confirmation
+        // automation below. Free workshops need no payment, so they start
+        // "Not Required (Free)" instead and are left alone by that automation.
         var status = "Not Required (Free)";
         if (upiRef) {
-          status = "Awaiting Verification";
+          status = "Pending";
           if (!/^\d{12}$/.test(upiRef)) {
             flags.push("UTR not 12 digits");
           } else {
@@ -1164,8 +1199,12 @@ const GEMS_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQwu
           }
         }
 
+        // Booking Status is separate from Payment Status: it starts "Pending"
+        // and is only ever flipped to "Confirmed" by the onEditHandler
+        // automation below, never here — so a booking is never shown as
+        // confirmed before you've actually verified the payment.
         sheet.appendRow([new Date(), p.workshop, p.date, p.time, p.price, p.name, p.phone,
-          p.email, p.people, p.notes, upiRef, status, flags.join(" | ")]);
+          p.email, p.people, p.notes, upiRef, status, "Pending", "No", flags.join(" | ")]);
         return ContentService.createTextOutput(JSON.stringify({result:"success"}))
           .setMimeType(ContentService.MimeType.JSON);
       }
@@ -1194,6 +1233,101 @@ const GEMS_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQwu
 const BOOKING_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwvRcQ74Nly5CYALp9MyWMjRv_jjCc_NXNu89GmNzQpPgvUrweFKd1_H9ltWIfdyfBPTw/exec";
 const UPI_ID = "9638083043@superyes";
 const UPI_PAYEE_NAME = "thelocalloop";
+
+/* ============================================================================
+   BOOKING CONFIRMATION AUTOMATION (Google Apps Script, same project as above)
+   ----------------------------------------------------------------------------
+   Goal: you check a payment's UTR against your bank/UPI app, then manually
+   edit that row's "Payment Status" cell from "Pending" to "Confirmed" — and
+   the sheet takes it from there: it emails the customer and flips "Booking
+   Status" to "Confirmed" for you. Editing the row again afterwards (fixing
+   a typo, re-saving, etc.) never re-sends the email, because the
+   "Confirmation Sent" column is checked first and only ever flips
+   "No" → "Yes" once.
+
+   EMAIL ONLY, NO COST: this sends the confirmation by email only, using
+   Apps Script's built-in MailApp — nothing to sign up for, nothing to pay.
+   SMS/WhatsApp are intentionally left out because every provider capable
+   of sending them (Twilio, MSG91, Gupshup, etc.) charges per message and
+   requires a paid account plus DLT template registration in India. Phone
+   numbers are still collected and stored in the sheet as before, so
+   they're available if you ever want to call or WhatsApp someone by hand,
+   or want to wire up a paid SMS/WhatsApp provider later.
+
+   WHY AN INSTALLABLE TRIGGER, NOT A SIMPLE onEdit(e) FUNCTION:
+   A plain `function onEdit(e){...}` placed in the script runs automatically,
+   but Google blocks it from doing anything that needs your permission —
+   and sending email needs that permission. The fix is to write the
+   function under a different name and attach it as an "installable
+   trigger" instead (steps below), which does run with your authorization.
+
+   SETUP (one time, in the same Apps Script project as the booking form):
+   1. Extensions → Apps Script (from the Bookings sheet). Paste this function
+      in alongside the existing doPost():
+
+      function onEditHandler(e) {
+        var sheet = e.range.getSheet();
+        if (sheet.getName() !== "Bookings") return;
+        if (e.range.getRow() === 1) return; // header row
+
+        var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+        var col = {};
+        headers.forEach(function(h, i){ col[h] = i + 1; });
+        // Only react when the edited cell is Payment Status itself.
+        if (e.range.getColumn() !== col["Payment Status"]) return;
+
+        var row = e.range.getRow();
+        var newStatus = String(e.value || "").trim();
+        if (newStatus !== "Confirmed") return;
+
+        var sentCell = sheet.getRange(row, col["Confirmation Sent"]);
+        if (String(sentCell.getValue()).trim() === "Yes") return; // already sent, never repeat
+
+        var data = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+        var name = data[col["Name"] - 1];
+        var email = data[col["Email"] - 1];
+        var workshop = data[col["Workshop"] - 1];
+        var date = data[col["Date"] - 1];
+        var time = data[col["Time"] - 1];
+
+        var message = "Hi " + name + ", your booking for \"" + workshop + "\" on " + date +
+          " (" + time + ") is confirmed! See you there — thelocalloop.";
+
+        // Email only — built into Apps Script, free, no third-party account.
+        if (email) {
+          MailApp.sendEmail({
+            to: email,
+            subject: "Booking Confirmed — " + workshop,
+            body: message
+          });
+        }
+
+        sheet.getRange(row, col["Booking Status"]).setValue("Confirmed");
+        sentCell.setValue("Yes");
+      }
+
+   2. Attach it as an installable trigger: in the Apps Script editor, click
+      the clock icon ("Triggers") in the left sidebar → "+ Add Trigger" →
+      set "Choose which function to run" to onEditHandler, "Event source"
+      to "From spreadsheet", "Event type" to "On edit" → Save. You'll be
+      asked to authorize the script the first time — this is expected and
+      only needs doing once.
+   3. Add the "Booking Status" and "Confirmation Sent" columns to any
+      existing Bookings sheet created before this update (new bookings from
+      the code above already include them). Set every existing row's
+      "Booking Status" to "Pending" and "Confirmation Sent" to "No".
+
+   NOTE ON GMAIL'S FREE SENDING LIMIT: a free Gmail/Google account can send
+   roughly 100 emails per day via MailApp, which comfortably covers a
+   weekly workshop list. If you outgrow that, a Google Workspace account
+   raises the limit — still no per-message cost.
+
+   IF YOU LATER WANT SMS/WHATSAPP: add a paid provider (Twilio, MSG91, or
+   Gupshup are the common choices) and call its API from inside
+   onEditHandler the same way MailApp is called above. All of them charge
+   per message and require an approved message template — MSG91/Twilio
+   also require TRAI DLT registration for SMS sent to Indian numbers.
+   ============================================================================ */
 
 /* ============================================================================
    COLLABORATE FORM → GOOGLE SHEET
@@ -1420,6 +1554,44 @@ function showLoading(containerId, label){
 
 let activeWorkshopFilter = 'All';
 let workshopSearchTerm = '';
+let workshopDateFilter = ''; // 'YYYY-MM-DD' from the date picker, or '' for any
+let workshopTimeFilter = ''; // 'morning' | 'afternoon' | 'evening' | 'night' | '' for any
+
+const MONTH_NAMES = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+
+/* Workshop dates are free text like "Sat, 5 July" (no year). We match the
+   picked date by day-of-month + month name only, ignoring year, since the
+   sheet never includes one. */
+function workshopDateMatchesFilter(dateStr, isoDate){
+  if(!isoDate) return true;
+  if(!dateStr) return false;
+  const [, pickedMonth, pickedDay] = isoDate.split('-').map(Number);
+  const text = dateStr.toLowerCase();
+  const dayMatch = text.match(/\b(\d{1,2})\b/);
+  if(!dayMatch || +dayMatch[1] !== pickedDay) return false;
+  const monthIdx = MONTH_NAMES.findIndex(m => text.includes(m));
+  if(monthIdx === -1) return false;
+  return (monthIdx + 1) === pickedMonth;
+}
+
+/* Buckets a workshop's start time (e.g. "5:00 PM – 7:30 PM") into a
+   time-of-day category for the Morning/Afternoon/Evening/Night filter. */
+function workshopTimeBucket(timeStr){
+  if(!timeStr) return null;
+  const match = timeStr.match(/(\d{1,2}):?(\d{2})?\s*(AM|PM)/i);
+  if(!match) return null;
+  let hour = parseInt(match[1], 10) % 12;
+  if(/pm/i.test(match[3])) hour += 12;
+  if(hour >= 5 && hour < 12) return 'morning';
+  if(hour >= 12 && hour < 17) return 'afternoon';
+  if(hour >= 17 && hour < 21) return 'evening';
+  return 'night';
+}
+
+function workshopTimeMatchesFilter(timeStr, filter){
+  if(!filter) return true;
+  return workshopTimeBucket(timeStr) === filter;
+}
 
 function renderWorkshopChips(){
   const cats = ['All', ...new Set(workshopsData.map(w=>w.category).filter(Boolean))];
@@ -1448,7 +1620,9 @@ function renderWorkshops(){
   }
   const term = workshopSearchTerm.trim().toLowerCase();
   const matches = (w)=> workshopMatchesFilter(w, activeWorkshopFilter) &&
-    (term==='' || w.name.toLowerCase().includes(term) || w.venue.toLowerCase().includes(term) || (w.description||'').toLowerCase().includes(term));
+    (term==='' || w.name.toLowerCase().includes(term) || w.venue.toLowerCase().includes(term) || (w.description||'').toLowerCase().includes(term)) &&
+    workshopDateMatchesFilter(w.date, workshopDateFilter) &&
+    workshopTimeMatchesFilter(w.time, workshopTimeFilter);
 
   const anyMatch = workshopsData.some(matches);
   emptyState.style.display = anyMatch ? 'none' : 'block';
@@ -1620,6 +1794,16 @@ document.getElementById('workshopSearch').addEventListener('input', (e)=>{
   renderWorkshops();
 });
 
+/* ---------- Workshop date & time filters ---------- */
+document.getElementById('workshopDateFilter').addEventListener('input', (e)=>{
+  workshopDateFilter = e.target.value;
+  renderWorkshops();
+});
+document.getElementById('workshopTimeFilter').addEventListener('change', (e)=>{
+  workshopTimeFilter = e.target.value;
+  renderWorkshops();
+});
+
 /* ---------- Cafe search input ---------- */
 document.getElementById('cafeSearch').addEventListener('input', (e)=>{
   cafeSearchTerm = e.target.value;
@@ -1740,15 +1924,31 @@ function isMobileDevice(){
   return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
-function buildUpiLink(amountRupees, note){
-  const params = new URLSearchParams({
+/* Generates a short, unique-enough transaction reference. Many UPI apps
+   (GPay/PhonePe/Paytm) require a "tr" param — without it they can reject
+   the intent outright with "This type of payment request is not allowed". */
+function generateUpiTxnRef(){
+  return 'TLL' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+
+/* Builds the UPI deep link by hand instead of via URLSearchParams, because
+   URLSearchParams encodes spaces as "+" — a form of encoding several UPI
+   apps don't accept in intent URIs, causing the payment request to be
+   rejected. Percent-encoding every value (via encodeURIComponent, which
+   uses %20 for spaces) fixes this. */
+function buildUpiLink(amountRupees, note, txnRef){
+  const params = {
     pa: UPI_ID,
     pn: UPI_PAYEE_NAME,
+    tr: txnRef,
     am: amountRupees.toFixed(2),
     cu: 'INR',
     tn: note || 'Workshop booking'
-  });
-  return `upi://pay?${params.toString()}`;
+  };
+  const query = Object.keys(params)
+    .map(k => `${k}=${encodeURIComponent(params[k])}`)
+    .join('&');
+  return `upi://pay?${query}`;
 }
 
 function updateUpiBox(){
@@ -1770,7 +1970,10 @@ function updateUpiBox(){
   upiRefField.setAttribute('data-required', 'true');
   document.getElementById('upiAmountLabel').textContent = `₹${rupees}`;
   const workshopName = document.getElementById('bookingWorkshopLabel').textContent;
-  const link = buildUpiLink(rupees, workshopName);
+  // Keep the note short and free of characters some UPI apps choke on.
+  const note = workshopName.replace(/[^a-zA-Z0-9 ]/g, '').trim().slice(0, 40) || 'Workshop booking';
+  const txnRef = generateUpiTxnRef();
+  const link = buildUpiLink(rupees, note, txnRef);
 
   document.getElementById('upiQrImg').src =
     `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(link)}`;
@@ -1829,6 +2032,22 @@ function closeBookingModal(){
 
 bookingOverlay.addEventListener('click', (e)=>{ if(e.target === bookingOverlay) closeBookingModal(); });
 document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && bookingOverlay.classList.contains('open')) closeBookingModal(); });
+
+/* ---------- Booking success popup ---------- */
+const bookingSuccessOverlay = document.getElementById('bookingSuccessOverlay');
+
+function openBookingSuccessModal(){
+  bookingSuccessOverlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeBookingSuccessModal(){
+  bookingSuccessOverlay.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+bookingSuccessOverlay.addEventListener('click', (e)=>{ if(e.target === bookingSuccessOverlay) closeBookingSuccessModal(); });
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && bookingSuccessOverlay.classList.contains('open')) closeBookingSuccessModal(); });
 
 /* ---------- Cafe photo gallery modal ---------- */
 const galleryOverlay = document.getElementById('galleryOverlay');
@@ -1943,8 +2162,11 @@ bookingForm.addEventListener('submit', async (e)=>{
       ? '✓ Booking received! We\'ll verify your payment and confirm shortly.'
       : '✓ Booking received! We\'ll confirm shortly.';
     bookingSubmitBtn.textContent = 'Booked';
-    showToast(paymentRequired ? 'Booking submitted — pending verification' : 'Booking confirmed 🎉');
-    setTimeout(closeBookingModal, 1800);
+    showToast('Booking request submitted');
+    setTimeout(()=>{
+      closeBookingModal();
+      openBookingSuccessModal();
+    }, 1200);
   }catch(err){
     bookingSubmitBtn.disabled = false;
     bookingSubmitBtn.textContent = 'Confirm Booking';
