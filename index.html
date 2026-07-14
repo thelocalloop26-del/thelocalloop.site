@@ -241,12 +241,15 @@
   .w-card .body{ padding:22px; display:flex; flex-direction:column; gap:10px; flex:1; }
   .w-card .meta{ display:flex; flex-wrap:wrap; gap:10px 16px; font-size:12.5px; color:var(--slate); }
   .w-card .meta span{ display:flex; align-items:center; gap:5px; }
+  .w-card .meta span.seats-out{ color:#d9694a; font-weight:600; }
   .w-card .desc{ font-size:13.5px; }
   .w-card .price{ font-family:var(--display); font-size:17px; color:var(--gold-light); margin-top:auto; }
   .w-card .actions{ display:flex; gap:10px; padding:0 22px 22px; }
   .w-card .actions a, .w-card .actions button{ flex:1; text-align:center; padding:11px; border-radius:12px; font-size:12.5px; font-weight:600; letter-spacing:.02em; transition:.3s; }
   .w-card .actions .book{ background:var(--gold); color:var(--navy-deep); }
   .w-card .actions .book:hover{ background:var(--gold-light); }
+  .w-card .actions .book:disabled{ background:var(--navy-raised); color:var(--slate); cursor:not-allowed; }
+  .w-card .actions .book:disabled:hover{ background:var(--navy-raised); }
   .w-card .actions .map{ border:1px solid var(--line); color:var(--cream); }
   .w-card .actions .map:hover{ border-color:var(--gold); color:var(--gold-light); }
 
@@ -830,7 +833,7 @@
         <label>Email</label>
         <input type="email" name="email" placeholder="you@email.com">
         <span class="err">Enter a valid email.</span>
-        <span style="font-size:11px; color:var(--slate); margin-top:2px;">Please provide your current, daily-use Email ID — your booking confirmation will be sent on Email ID you provide.</span>
+        <span style="font-size:11px; color:var(--slate); margin-top:2px;">Please provide your current, daily-use email — your booking confirmation will be sent there.</span>
       </div>
       <div class="field">
         <label>Notes (optional)</label>
@@ -946,6 +949,7 @@ const workshopsFallbackData = [
     description: "Get your hands dirty on the pottery wheel and take home whatever you throw — beginners welcome.",
     category: "Art & Craft",
     price: "₹899",
+    seats: 12,
     bookingLink: "https://instagram.com/thelocallooop",
     mapsLink: "https://maps.google.com/?q=Bodakdev+Ahmedabad"
   },
@@ -958,6 +962,7 @@ const workshopsFallbackData = [
     description: "A guided outdoor sketching session along the lake, materials provided, all skill levels.",
     category: "Outdoor",
     price: "₹499",
+    seats: 20,
     bookingLink: "https://instagram.com/thelocallooop",
     mapsLink: "https://maps.google.com/?q=Kankaria+Lake+Ahmedabad"
   },
@@ -970,6 +975,7 @@ const workshopsFallbackData = [
     description: "No partner needed — an energetic first step into salsa, led by a certified instructor.",
     category: "Dance",
     price: "₹699",
+    seats: 15,
     bookingLink: "https://instagram.com/thelocallooop",
     mapsLink: "https://maps.google.com/?q=SG+Highway+Ahmedabad"
   }
@@ -1224,6 +1230,38 @@ const GEMS_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQwu
         // confirmed before you've actually verified the payment.
         sheet.appendRow([new Date(), p.workshop, p.date, p.time, p.price, p.name, p.phone,
           p.email, p.people, p.notes, upiRef, status, "Pending", "No", flags.join(" | ")]);
+
+        // Decrement "Seats Available" on the Workshops sheet the moment a
+        // booking comes in (before payment is even verified) — this is what
+        // makes the number on the website count down automatically. Silently
+        // does nothing if the Workshops sheet, the workshop name, or a
+        // "seats" column can't be found, so a seat-tracking issue never
+        // blocks a booking from being recorded.
+        try {
+          var wSheet = SpreadsheetApp.openById("1exLF6aWfX0eDrVPl7cQISHh037k19b2u5o01_Ker68I").getSheetByName("Workshops");
+          if (wSheet) {
+            var wHeaders = wSheet.getRange(1, 1, 1, wSheet.getLastColumn()).getValues()[0];
+            var nameCol = wHeaders.indexOf("name") + 1;
+            var seatsCol = wHeaders.indexOf("seats") + 1;
+            if (nameCol > 0 && seatsCol > 0) {
+              var wData = wSheet.getDataRange().getValues();
+              for (var wr = 1; wr < wData.length; wr++) {
+                if (String(wData[wr][nameCol - 1]).trim() === String(p.workshop).trim()) {
+                  var currentSeats = Number(wData[wr][seatsCol - 1]);
+                  var peopleBooked = Number(p.people) || 1;
+                  if (!isNaN(currentSeats)) {
+                    var newSeats = Math.max(0, currentSeats - peopleBooked);
+                    wSheet.getRange(wr + 1, seatsCol).setValue(newSeats);
+                  }
+                  break;
+                }
+              }
+            }
+          }
+        } catch (seatErr) {
+          // Never let a seat-tracking problem break the booking itself.
+        }
+
         return ContentService.createTextOutput(JSON.stringify({result:"success"}))
           .setMimeType(ContentService.MimeType.JSON);
       }
@@ -1233,6 +1271,25 @@ const GEMS_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQwu
    4. Copy the Web App URL (ends in /exec) and paste it below.
    5. Save this file and re-upload it once. Setup is then done for good —
       every booking submitted on the site becomes a new row in "Bookings".
+
+   SEATS AVAILABLE (new): the Workshops sheet needs a column headed exactly
+   "seats" (lowercase, same as the other headers like "date" and "time") —
+   put the total capacity for each workshop in there. Every time someone
+   books, this Apps Script opens the separate Workshops spreadsheet by ID,
+   finds that workshop's row by matching the "name" column, and subtracts
+   the number of people booked, right in the Workshops sheet — the
+   website's "Seats Available" number just reflects whatever is currently
+   in that cell. Leave the "seats" cell blank for any workshop that
+   shouldn't show a seat count (e.g. an uncapped event).
+   Workshops lives in a SEPARATE spreadsheet from Bookings, so the code
+   uses SpreadsheetApp.openById("1exLF6aWfX0eDrVPl7cQISHh037k19b2u5o01_Ker68I")
+   rather than getActiveSpreadsheet() — this only works because the script
+   is deployed under the account that owns (or has edit access to) that
+   Workshops spreadsheet too. If you ever move or recreate the Workshops
+   file, its ID changes and this line needs updating to match.
+   Also note: the website reads workshops from a PUBLISHED CSV, and Google
+   only refreshes that publish every few minutes — so the seat count on the
+   site can lag a few minutes behind the sheet right after a booking.
 
    ALREADY LIVE ON THIS SITE? If you set up the booking sheet before this
    update, your Apps Script only has the old code, and your sheet is
@@ -1503,6 +1560,7 @@ async function loadWorkshopsFromSheet(){
       description: r.description || '',
       category: r.category || '',
       price: r.price || '',
+      seats: r.seats || '',
       bookingLink: r.bookingLink || '#',
       mapsLink: r.mapsLink || '#'
     }));
@@ -1665,6 +1723,11 @@ function renderWorkshops(){
 
   workshopsData.forEach((w, idx)=>{
     if(!matches(w)) return;
+    // Seats is optional (organizer may leave it blank for uncapped workshops).
+    // Only treat it as a real number when the sheet actually has a value.
+    const hasSeats = w.seats !== '' && w.seats !== null && w.seats !== undefined && !isNaN(Number(w.seats));
+    const seatsLeft = hasSeats ? Math.max(0, Math.floor(Number(w.seats))) : null;
+    const soldOut = hasSeats && seatsLeft <= 0;
     const card = el(`
       <div class="w-card">
         <div class="poster" style="background-image:url('${w.image}')"><span class="cat">${w.category}</span></div>
@@ -1674,12 +1737,15 @@ function renderWorkshops(){
             <span>📅 ${w.date}</span>
             <span>🕒 ${w.time}</span>
             <span>📍 ${w.venue}</span>
+            ${hasSeats ? `<span class="${soldOut ? 'seats-out' : ''}">🎟️ ${soldOut ? 'Sold Out' : 'Seats Available: ' + seatsLeft}</span>` : ''}
           </div>
           <p class="desc">${w.description}</p>
           ${w.price ? `<div class="price">${w.price}</div>` : ''}
         </div>
         <div class="actions">
-          <button type="button" class="book" data-workshop-index="${idx}">Book Now</button>
+          ${soldOut
+            ? `<button type="button" class="book" disabled>Sold Out</button>`
+            : `<button type="button" class="book" data-workshop-index="${idx}">Book Now</button>`}
           <a class="map" href="${w.mapsLink}" target="_blank" rel="noopener">Google Maps</a>
         </div>
       </div>
