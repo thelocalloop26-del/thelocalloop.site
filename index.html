@@ -1107,7 +1107,7 @@ const hiddenGemsFallbackData = [
       exact same column headers as listed below):
 
       Workshops columns (first row, exact spelling):
-      image | name | date | time | venue | description | category | price | bookingLink | mapsLink
+      image | name | date | time | venue | description | category | price | bookingLink | mapsLink | host
 
       Cafes columns (first row, exact spelling):
       image | name | rating | avgCost | bestDish | cuisine | area | petFriendly | workFriendly | rooftop | lateNight | budget | mapsLink | offerLink
@@ -1562,7 +1562,8 @@ async function loadWorkshopsFromSheet(){
       price: r.price || '',
       seats: r.seats || '',
       bookingLink: r.bookingLink || '#',
-      mapsLink: r.mapsLink || '#'
+      mapsLink: r.mapsLink || '#',
+      host: r.host || ''
     }));
     if(mapped.length) workshopsData = mapped;
   }catch(e){
@@ -1737,6 +1738,7 @@ function renderWorkshops(){
             <span>📅 ${w.date}</span>
             <span>🕒 ${w.time}</span>
             <span>📍 ${w.venue}</span>
+            ${w.host ? `<span>👤 Hosted by ${w.host}</span>` : ''}
             ${hasSeats ? `<span class="${soldOut ? 'seats-out' : ''}">🎟️ ${soldOut ? 'Sold Out' : 'Seats Available: ' + seatsLeft}</span>` : ''}
           </div>
           <p class="desc">${w.description}</p>
